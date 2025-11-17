@@ -2,6 +2,21 @@ name: Production Deployment
 
 on:
   workflow_dispatch:
+    inputs:
+      rollback:
+        description: "Perform rollback? true/false"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+      rollback_version:
+        description: "Version to rollback to (vX.Y.Z). Required if rollback=true"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   deploy-to-prod:
