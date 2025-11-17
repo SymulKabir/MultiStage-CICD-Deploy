@@ -50,6 +50,7 @@ jobs:
           target: "/opt/fatack_uti/upload_temp"
           strip_components: 0
 
+
       # 5️⃣ Upload Production deployment script
       - name: Upload production deployment script
         uses: appleboy/scp-action@v0.1.4
