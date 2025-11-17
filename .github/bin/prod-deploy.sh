@@ -1,111 +1,80 @@
 #!/bin/bash
 set -e
 
-echo "====== Production Deployment Script Started ======"
+# ====== CHECK & INSTALL REQUIRED TOOLS ======
 
-timestamp=$(date +%Y%m%d_%H%M%S)
+install_if_missing() {
+    local tool="$1"
+    local package="$2"
 
-UPLOAD_DIR="/opt/fatack/upload_temp_prod"
-TARGET_DIR="/opt/fatack/ofsaa"
-BACKUP_DIR="/opt/fatack/backup_prod_$timestamp"
-
-# -----------------------
-# Rollback function
-# -----------------------
-rollback() {
-    echo "❌ Deployment FAILED. Rolling back..."
-    if [ -d "$BACKUP_DIR" ]; then
-        rm -rf "$TARGET_DIR"
-        mkdir -p "$TARGET_DIR"
-        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/
-        echo "✔ Rollback completed. System restored to previous production state."
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "⚠ $tool not found. Installing $package..."
+        sudo apt update -y
+        sudo apt install -y "$package"
+        echo "✔ Installed: $tool"
     else
-        echo "⚠ No backup found! Rollback FAILED."
+        echo "✔ $tool is already installed"
     fi
 }
 
-trap rollback ERR
+install_if_missing "xmllint" "libxml2-utils"
+install_if_missing "sqlformat" "python3-sqlparse"
+install_if_missing "file" "file"
 
-echo "Creating backup of existing Production files..."
-mkdir -p "$BACKUP_DIR"
+echo "====== All validation tools are ready ======"
 
-if [ -d "$TARGET_DIR" ] && [ "$(ls -A "$TARGET_DIR")" ]; then
-  cp -r "$TARGET_DIR"/* "$BACKUP_DIR"/
-  echo "Backup completed at $BACKUP_DIR"
-else
-  echo "Production target directory empty. Skipping backup."
-fi
 
-# -----------------------
-# File validation function
-# -----------------------
-validate_files() {
+# ====== VALIDATION FUNCTIONS ======
+
+validate_file() {
+    local file="$1"
+
+    case "$file" in
+        *.xml)
+            echo "Checking XML with xmllint: $(basename "$file")"
+            xmllint --noout "$file" || {
+                echo "❌ Invalid XML format!"
+                return 1
+            }
+            ;;
+
+        *.sql)
+            echo "Checking SQL using sqlformat: $(basename "$file")"
+            sqlformat "$file" >/dev/null 2>&1 || {
+                echo "❌ Invalid SQL format!"
+                return 1
+            }
+            ;;
+
+        *.txt)
+            echo "Checking TXT: $(basename "$file")"
+            if ! file "$file" | grep -qi "text"; then
+                echo "❌ Invalid TXT file (not readable text)"
+                return 1
+            fi
+            ;;
+    esac
+
+    echo "✔ Valid file: $(basename "$file")"
+}
+
+validate_folder() {
     local folder="$1"
     local path="$UPLOAD_DIR/$folder"
 
-    if [ ! -d "$path" ]; then
-        echo "Skipping validation: $folder not found."
-        return 0
-    fi
-
-    echo "Validating files in folder: $folder"
+    [ ! -d "$path" ] && return 0
 
     shopt -s nullglob
     local files=("$path"/*)
 
-    if [ ${#files[@]} -eq 0 ]; then
-        echo "⚠ WARNING: $folder is empty — skipping deployment."
-        return 0
-    fi
-
-    for f in "${files[@]}"; do
-        case "$f" in
-            *.txt|*.sql|*.xml)
-                echo "✔ VALID: $(basename "$f")"
+    for file in "${files[@]}"; do
+        case "$file" in
+            *.xml|*.sql|*.txt)
+                validate_file "$file" || return 1
                 ;;
             *)
-                echo "❌ INVALID FILE TYPE: $(basename "$f")"
-                echo "Allowed: .txt .sql .xml"
-                return 1
+                echo "✔ Allowed file: $(basename "$file") (no validation needed)"
                 ;;
         esac
     done
 }
-
-# -----------------------
-# Safe move function
-# -----------------------
-move_folder() {
-    local src="$1"
-    local dest="$2"
-
-    validate_files "$src"
-
-    if [ -d "$UPLOAD_DIR/$src" ]; then
-        echo "Deploying $src..."
-        mkdir -p "$dest"
-
-        mv "$UPLOAD_DIR/$src"/* "$dest"/ || {
-            echo "❌ ERROR: Failed moving $src"
-            return 1
-        }
-
-        echo "$src deployed to $dest"
-    else
-        echo "Folder $src not found. Skipping..."
-    fi
-}
-
-# -----------------------
-# Deploy folders
-# -----------------------
-move_folder "bdf-datamaps" "$TARGET_DIR/bdf/config/datamaps"
-move_folder "custom-datamaps" "$TARGET_DIR/bdf/config/customs"
-move_folder "ingestion-manager" "$TARGET_DIR/ingestion_manager/config"
-move_folder "scenarios" "$TARGET_DIR/bdf/config"
-move_folder "controlm-scripts" "$TARGET_DIR/ESP/scripts"
-
-echo "Cleaning temporary upload directory..."
-rm -rf "$UPLOAD_DIR"
-
-echo "====== Production Deployment Completed Successfully ======"
