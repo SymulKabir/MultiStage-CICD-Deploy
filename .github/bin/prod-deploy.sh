@@ -102,11 +102,9 @@ validate_folder() {
 }
 
 
-# ====== RUN VALIDATION ======
-validate_folder "bdf-datamaps"
-validate_folder "custom-datamaps"
-validate_folder "ingestion-manager"
-validate_folder "scenarios"
-validate_folder "controlm-scripts"
+# ====== RUN VALIDATION ====== 
+for dir in "$UPLOAD_DIR"/*; do
+    validate_folder "$dir"
+done
 
 echo "✔ All validations completed successfully"
