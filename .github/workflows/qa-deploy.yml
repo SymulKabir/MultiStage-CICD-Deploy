@@ -3,70 +3,76 @@ name: QA Deployment
 on:
   push:
     branches:
-      - qatest
+      - master
+      # - qatest
 
 jobs:
-  deploy-to-qa:
+  deploy-to-dev:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout code
+      # 1️⃣ Checkout UAT branch for Production release
+      - name: Checkout qatest branch
         uses: actions/checkout@v3
+        with:
+          ref: master
+          # ref: qatest
 
-      # 2️⃣ Debug: show workspace (optional)
+
+      # 2️⃣ Show repo structure (optional)
       - name: Show repo file structure
         run: |
-          echo "Current workspace:"
+          echo "Workspace content:"
           ls -R .
 
-      # 3️⃣ Ensure /qa-bin exists on QA server
-      - name: Ensure /qa-bin exists on QA server
+      # 3️⃣ Ensure /qa-bin exists on Production server
+      - name: Ensure /qa-bin directory exists on PROD server
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.QA_SSH_HOST }}
-          username: ${{ secrets.QA_SSH_USER }}
-          key: ${{ secrets.QA_SSH_KEY }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          # key: ${{ secrets.DEV_SSH_KEY }}
+          password: ${{ secrets.DEV_PASSWORD }}
           script: |
             sudo mkdir -p /qa-bin
-            sudo chmod 777 /qa-bin
+            sudo chmod 777 /qa-deploy
             echo "/qa-bin directory ready"
 
-
-
-      # 4️⃣ Upload all folders to QA server
-      - name: Upload folders to QA server
+      # 4️⃣ Upload deployment folders to production
+      - name: Upload folders to Production server
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.QA_SSH_HOST }}
-          username: ${{ secrets.QA_SSH_USER }}
-          key: ${{ secrets.QA_SSH_KEY }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          # key: ${{ secrets.DEV_SSH_KEY }}
+          password: ${{ secrets.DEV_PASSWORD }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
-          target: "/opt/fatack/upload_temp"
+          target: "/opt/fatack_uti/upload_temp"
           strip_components: 0
 
-      # 5️⃣ Upload QA deployment script to QA server
-      - name: Upload deployment script to QA server
+
+      # 5️⃣ Upload Production deployment script
+      - name: Upload production deployment script
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.QA_SSH_HOST }}
-          username: ${{ secrets.QA_SSH_USER }}
-          key: ${{ secrets.QA_SSH_KEY }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          # key: ${{ secrets.DEV_SSH_KEY }}
+          password: ${{ secrets.DEV_PASSWORD }}
           source: "./.github/bin/qa-deploy.sh"
-          target: "/qa-bin"
+          target: "/qa-deploy"
           strip_components: 2
 
-
-      # 6️⃣ Run backup & deployment script on QA server
-      - name: Run deployment script on QA server
+      # 6️⃣ Run deployment script on Production server
+      - name: Run deployment script on Production
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.QA_SSH_HOST }}
-          username: ${{ secrets.QA_SSH_USER }}
-          key: ${{ secrets.QA_SSH_KEY }}
+          host: ${{ secrets.DEV_SSH_HOST }}
+          username: ${{ secrets.DEV_SSH_USER }}
+          # key: ${{ secrets.DEV_SSH_KEY }}
+          password: ${{ secrets.DEV_PASSWORD }}
           script: |
             echo "Listing /qa-bin before running script:"
-            ls -la /qa-bin/bin
-            sudo chmod +x /qa-bin/bin/qa-deploy.sh
-            sudo /qa-bin/bin/qa-deploy.sh
- 
+            ls -la/qa-bin/bin
+            sudo chmod +x/qa-bin/bin/dev-deploy.sh
+            sudo/qa-bin/bin/dev-deploy.sh

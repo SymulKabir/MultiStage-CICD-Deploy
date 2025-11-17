@@ -3,8 +3,8 @@ name: Dev Deployment
 on:
   push:
     branches:
-      - master
-      # - development
+      # - master
+      - development
 
 jobs:
   deploy-to-dev:
@@ -15,8 +15,8 @@ jobs:
       - name: Checkout UAT branch
         uses: actions/checkout@v3
         with:
-          ref: master
-          # ref: development
+          # ref: master
+          ref: development
 
 
       # 2️⃣ Show repo structure (optional)

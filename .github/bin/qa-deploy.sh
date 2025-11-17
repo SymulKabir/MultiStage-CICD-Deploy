@@ -1,72 +1,136 @@
 #!/bin/bash
 set -e
 
-echo "====== QA Deployment Script Started ======"
-
-timestamp=$(date +%Y%m%d_%H%M%S)
-
-UPLOAD_DIR="/opt/fatack/upload_temp"
+# ====== CONFIG PATHS ======
+UPLOAD_DIR="/opt/fatack_uti/upload_temp"
+BACKUP_DIR="/opt/fatack_uti/backup_$(date +%Y%m%d_%H%M%S)"
 TARGET_DIR="/opt/fatack/ofsaa"
-BACKUP_DIR="/opt/fatack/backup_qa_$timestamp"
 
-# -----------------------
-# Rollback function
-# -----------------------
-rollback() {
-    echo "❌ Deployment FAILED. Rolling back..."
-    if [ -d "$BACKUP_DIR" ]; then
-        rm -rf "$TARGET_DIR"
-        mkdir -p "$TARGET_DIR"
-        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/
-        echo "✔ Rollback completed. System restored to previous state."
-    else
-        echo "⚠ No backup found! Rollback FAILED."
-    fi
-}
-
-# Trap any error and run rollback
-trap rollback ERR
-
-echo "Creating backup of existing QA files..."
 mkdir -p "$BACKUP_DIR"
 
-if [ -d "$TARGET_DIR" ] && [ "$(ls -A "$TARGET_DIR")" ]; then
-  cp -r "$TARGET_DIR"/* "$BACKUP_DIR"/
-  echo "Backup completed at $BACKUP_DIR"
-else
-  echo "Target directory does not exist or is empty. Skipping backup."
-fi
 
-# -----------------------
-# Safe move function
-# -----------------------
-move_folder() {
-    local src="$1"
-    local dest="$2"
-y
-    if [ -d "$UPLOAD_DIR/$src" ]; then
-        echo "Deploying $src..."
-        mkdir -p "$dest"
+# ====== ROLLBACK FUNCTION ======
+rollback_now() {
+    echo "⚠ Validation failed! Rolling back..."
+    mkdir -p "$TARGET_DIR"
+    
+    if [ -d "$BACKUP_DIR" ]; then
+        echo "Hell ofrom inner directory "
+        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
+    fi
 
-        mv "$UPLOAD_DIR/$src"/* "$dest"/ || {
-            echo "❌ ERROR: Failed to move $src"
-            return 1
-        }
+    echo "✔ Rollback completed"
+    exit 1
+}
 
-        echo "$src deployed to $dest"
+# ====== CHECK & INSTALL REQUIRED TOOLS ======
+install_if_missing() {
+    local tool="$1"
+    local package="$2"
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "⚠ $tool not found. Installing $package..."
+        sudo apt update -y
+        sudo apt install -y "$package"
+        echo "✔ Installed: $tool"
     else
-        echo "Folder $src does not exist in upload. Skipping..."
+        echo "✔ $tool already installed"
     fi
 }
 
-# Deploy folders
-move_folder "bdf-datamaps" "$TARGET_DIR/bdf/config/datamaps"
-move_folder "custom-datamaps" "$TARGET_DIR/bdf/config/customs"
-move_folder "ingestion-manager" "$TARGET_DIR/ingestion_manager/config"
-move_folder "scenarios" "$TARGET_DIR/bdf/config"
-move_folder "controlm-scripts" "$TARGET_DIR/ESP/scripts"
+install_if_missing "xmllint" "libxml2-utils"
+install_if_missing "python3" "python3"
+install_if_missing "sqlformat" "python3-sqlparse"
+install_if_missing "file" "file"
 
-echo "Cleaning up temporary upload directory..."
-rm -rf "$UPLOAD_DIR"
+echo "====== All validation tools are ready ======"
 
-echo "====== QA Deployment Script Completed Successfully ======"
+# ====== VALIDATION FUNCTIONS ======
+validate_file() {
+    local file="$1"
+
+    case "$file" in
+        *.xml)
+            echo "Checking XML: $(basename "$file")"
+            xmllint --noout "$file" || {
+                echo "❌ Invalid XML format!"
+                rollback_now
+            }
+            ;;
+
+        *.sql)
+            echo "Checking SQL: $(basename "$file")"
+            python3 -c "
+import sqlparse
+with open(r'$file', 'r') as f:
+    sqlparse.parse(f.read())
+" || {
+                echo "❌ Invalid SQL format!"
+                rollback_now
+            }
+            ;;
+
+        *.txt)
+            echo "Checking TXT: $(basename "$file")"
+            if ! file "$file" | grep -qi "text"; then
+                echo "❌ Invalid TXT file!"
+                rollback_now
+            fi
+            ;;
+    esac
+
+    echo "✔ Valid file: $(basename "$file")"
+}
+
+validate_folder() {
+    local folder="$1"
+
+    [ ! -d "$folder" ] && return 0
+
+    echo "Validating folder: $folder"
+
+    shopt -s nullglob
+    local files=("$folder"/*)
+
+    for file in "${files[@]}"; do
+        if [ -d "$file" ]; then
+            validate_folder "$file"
+        else
+            case "$file" in
+                *.xml|*.sql|*.txt)
+                    validate_file "$file"
+                    ;;
+                *)
+                    echo "✔ Allowed file: $(basename "$file")"
+                    ;;
+            esac
+        fi
+    done
+}
+
+# ====== RUN VALIDATION ======
+for dir in "$UPLOAD_DIR"/*; do
+    if [ -d "$dir" ]; then
+        validate_folder "$dir"
+    fi
+done
+
+# echo "✔ All validations completed successfully"
+
+# ====== MOVE UPLOAD_DIR TO TARGET_DIR ======
+if [ -d "$UPLOAD_DIR" ]; then
+    echo "Moving validated files from $UPLOAD_DIR to $TARGET_DIR..."
+    
+    mkdir -p "$TARGET_DIR"
+
+    cp -r "$UPLOAD_DIR"/* "$TARGET_DIR"/ || {
+        echo "❌ Failed to move files. Triggering rollback."
+        rollback_now
+    }
+
+    echo "✔ Deployment completed successfully"
+else
+    echo "❌ Upload directory $UPLOAD_DIR does not exist. Triggering rollback."
+    rollback_now
+fi
+

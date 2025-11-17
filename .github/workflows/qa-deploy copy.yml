@@ -1,0 +1,72 @@
+name: QA Deployment
+
+on:
+  push:
+    branches:
+      - qatest
+
+jobs:
+  deploy-to-qa:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Debug: show workspace (optional)
+      - name: Show repo file structure
+        run: |
+          echo "Current workspace:"
+          ls -R .
+
+      # 3️⃣ Ensure /qa-bin exists on QA server
+      - name: Ensure /qa-bin exists on QA server
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          script: |
+            sudo mkdir -p /qa-bin
+            sudo chmod 777 /qa-bin
+            echo "/qa-bin directory ready"
+
+
+
+      # 4️⃣ Upload all folders to QA server
+      - name: Upload folders to QA server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
+          target: "/opt/fatack/upload_temp"
+          strip_components: 0
+
+      # 5️⃣ Upload QA deployment script to QA server
+      - name: Upload deployment script to QA server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          source: "./.github/bin/qa-deploy.sh"
+          target: "/qa-bin"
+          strip_components: 2
+
+
+      # 6️⃣ Run backup & deployment script on QA server
+      - name: Run deployment script on QA server
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          script: |
+            echo "Listing /qa-bin before running script:"
+            ls -la /qa-bin/bin
+            sudo chmod +x /qa-bin/bin/qa-deploy.sh
+            sudo /qa-bin/bin/qa-deploy.sh
+ 
