@@ -12,7 +12,8 @@ mkdir -p "$BACKUP_DIR"
 # ====== ROLLBACK FUNCTION ======
 rollback_now() {
     echo "⚠ Validation failed! Rolling back..."
-
+    mkdir -p "$TARGET_DIR"
+    
     if [ -d "$BACKUP_DIR" ]; then
         echo "Hell ofrom inner directory "
         cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
@@ -119,10 +120,14 @@ done
 # ====== MOVE UPLOAD_DIR TO TARGET_DIR ======
 if [ -d "$UPLOAD_DIR" ]; then
     echo "Moving validated files from $UPLOAD_DIR to $TARGET_DIR..."
+    
+    mkdir -p "$TARGET_DIR"
+
     cp -r "$UPLOAD_DIR"/* "$TARGET_DIR"/ || {
         echo "❌ Failed to move files. Triggering rollback."
         rollback_now
     }
+
     echo "✔ Deployment completed successfully"
 else
     echo "❌ Upload directory $UPLOAD_DIR does not exist. Triggering rollback."
