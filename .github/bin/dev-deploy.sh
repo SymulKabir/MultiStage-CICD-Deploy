@@ -13,6 +13,7 @@ rollback_now() {
     echo "⚠ Validation failed! Rolling back..."
 
     if [ -d "$BACKUP_DIR" ]; then
+        echo "Hell ofrom inner directory "
         cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
     fi
 

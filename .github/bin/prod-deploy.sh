@@ -113,3 +113,16 @@ for dir in "$UPLOAD_DIR"/*; do
 done
 
 echo "✔ All validations completed successfully"
+
+# ====== MOVE UPLOAD_DIR TO TARGET_DIR ======
+if [ -d "$UPLOAD_DIR" ]; then
+    echo "Moving validated files from $UPLOAD_DIR to $TARGET_DIR..."
+    cp -r "$UPLOAD_DIR"/* "$TARGET_DIR"/ || {
+        echo "❌ Failed to move files. Triggering rollback."
+        rollback_now
+    }
+    echo "✔ Deployment completed successfully"
+else
+    echo "❌ Upload directory $UPLOAD_DIR does not exist. Triggering rollback."
+    rollback_now
+fi
