@@ -8,7 +8,6 @@ TARGET_DIR="/opt/fatack/ofsaa"
 
 mkdir -p "$BACKUP_DIR"
 
-
 # ====== ROLLBACK FUNCTION ======
 rollback_now() {
     echo "⚠ Validation failed! Rolling back..."
@@ -20,7 +19,6 @@ rollback_now() {
     echo "✔ Rollback completed"
     exit 1
 }
-
 
 # ====== CHECK & INSTALL REQUIRED TOOLS ======
 install_if_missing() {
@@ -38,14 +36,13 @@ install_if_missing() {
 }
 
 install_if_missing "xmllint" "libxml2-utils"
+install_if_missing "python3" "python3"
 install_if_missing "sqlformat" "python3-sqlparse"
 install_if_missing "file" "file"
 
 echo "====== All validation tools are ready ======"
 
-
 # ====== VALIDATION FUNCTIONS ======
-
 validate_file() {
     local file="$1"
 
@@ -60,7 +57,11 @@ validate_file() {
 
         *.sql)
             echo "Checking SQL: $(basename "$file")"
-            sqlformat "$file" >/dev/null 2>&1 || {
+            python3 -c "
+import sqlparse
+with open(r'$file', 'r') as f:
+    sqlparse.parse(f.read())
+" || {
                 echo "❌ Invalid SQL format!"
                 rollback_now
             }
@@ -80,34 +81,35 @@ validate_file() {
 
 validate_folder() {
     local folder="$1"
-    # local path="$UPLOAD_DIR/$folder"
-    local path="$folder"
 
-
-    [ ! -d "$path" ] && return 0
+    [ ! -d "$folder" ] && return 0
 
     echo "Validating folder: $folder"
 
     shopt -s nullglob
-    local files=("$path"/*)
+    local files=("$folder"/*)
 
     for file in "${files[@]}"; do
-        case "$file" in
-            *.xml|*.sql|*.txt)
-                validate_file "$file"
-                ;;
-            *)
-                echo "✔ Allowed file: $(basename "$file")"
-                ;;
-        esac
+        if [ -d "$file" ]; then
+            validate_folder "$file"
+        else
+            case "$file" in
+                *.xml|*.sql|*.txt)
+                    validate_file "$file"
+                    ;;
+                *)
+                    echo "✔ Allowed file: $(basename "$file")"
+                    ;;
+            esac
+        fi
     done
 }
 
-
-# ====== RUN VALIDATION ====== 
+# ====== RUN VALIDATION ======
 for dir in "$UPLOAD_DIR"/*; do
-    echo "Hello from $dir"
-    validate_folder "$dir"
+    if [ -d "$dir" ]; then
+        validate_folder "$dir"
+    fi
 done
 
 echo "✔ All validations completed successfully"
