@@ -27,7 +27,8 @@ jobs:
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
+          password: ${{ secrets.PROD_PASSWORD }}
           script: |
             sudo mkdir -p /prod-bin
             sudo chmod 777 /prod-bin
@@ -39,7 +40,8 @@ jobs:
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
+          password: ${{ secrets.PROD_PASSWORD }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
           target: "/opt/fatack/upload_temp_prod"
           strip_components: 0
@@ -50,7 +52,8 @@ jobs:
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
+          password: ${{ secrets.PROD_PASSWORD }}
           source: "./.github/bin/prod-deploy.sh"
           target: "/prod-bin"
           strip_components: 2
@@ -61,7 +64,8 @@ jobs:
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
+          password: ${{ secrets.PROD_PASSWORD }}
           script: |
             echo "Listing /prod-bin before running script:"
             ls -la /prod-bin/bin
