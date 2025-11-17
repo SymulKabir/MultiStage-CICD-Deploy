@@ -2,8 +2,8 @@
 set -e
 
 # ====== CONFIG PATHS ======
-UPLOAD_DIR="/opt/fatack/upload_temp_prod"
-BACKUP_DIR="/opt/fatack/backup_$(date +%Y%m%d_%H%M%S)"
+UPLOAD_DIR="/opt/fatack_uti/upload_temp"
+BACKUP_DIR="/opt/fatack_uti/backup_$(date +%Y%m%d_%H%M%S)"
 TARGET_DIR="/opt/fatack/ofsaa"
 
 mkdir -p "$BACKUP_DIR"

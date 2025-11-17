@@ -40,7 +40,7 @@ jobs:
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
-          target: "/opt/fatack/upload_temp"
+          target: "/opt/fatack_uti/upload_temp"
           strip_components: 0   # keep folders as-is
 
       # 5️⃣ Upload deployment script to DEV server (flatten path)
