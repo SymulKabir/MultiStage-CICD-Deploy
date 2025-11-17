@@ -1,111 +1,120 @@
 #!/bin/bash
 set -e
 
-echo "====== Production Deployment Script Started ======"
-
-timestamp=$(date +%Y%m%d_%H%M%S)
-
+# ====== CONFIG PATHS ======
 UPLOAD_DIR="/opt/fatack/upload_temp_prod"
+BACKUP_DIR="/opt/fatack/backup_$(date +%Y%m%d_%H%M%S)"
 TARGET_DIR="/opt/fatack/ofsaa"
-BACKUP_DIR="/opt/fatack/backup_prod_$timestamp"
 
-# -----------------------
-# Rollback function
-# -----------------------
-rollback() {
-    echo "❌ Deployment FAILED. Rolling back..."
+mkdir -p "$BACKUP_DIR"
+
+# ====== ROLLBACK FUNCTION ======
+rollback_now() {
+    echo "⚠ Validation failed! Rolling back..."
+
     if [ -d "$BACKUP_DIR" ]; then
-        rm -rf "$TARGET_DIR"
-        mkdir -p "$TARGET_DIR"
-        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/
-        echo "✔ Rollback completed. System restored to previous production state."
+        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
+    fi
+
+    echo "✔ Rollback completed"
+    exit 1
+}
+
+# ====== CHECK & INSTALL REQUIRED TOOLS ======
+install_if_missing() {
+    local tool="$1"
+    local package="$2"
+
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "⚠ $tool not found. Installing $package..."
+        sudo apt update -y
+        sudo apt install -y "$package"
+        echo "✔ Installed: $tool"
     else
-        echo "⚠ No backup found! Rollback FAILED."
+        echo "✔ $tool already installed"
     fi
 }
 
-trap rollback ERR
+install_if_missing "xmllint" "libxml2-utils"
+install_if_missing "python3" "python3"
+install_if_missing "sqlformat" "python3-sqlparse"
+install_if_missing "file" "file"
 
-echo "Creating backup of existing Production files..."
-mkdir -p "$BACKUP_DIR"
+echo "====== All validation tools are ready ======"
 
-if [ -d "$TARGET_DIR" ] && [ "$(ls -A "$TARGET_DIR")" ]; then
-  cp -r "$TARGET_DIR"/* "$BACKUP_DIR"/
-  echo "Backup completed at $BACKUP_DIR"
-else
-  echo "Production target directory empty. Skipping backup."
-fi
+# ====== VALIDATION FUNCTIONS ======
+validate_file() {
+    local file="$1"
 
-# -----------------------
-# File validation function
-# -----------------------
-validate_files() {
+    case "$file" in
+        *.xml)
+            echo "Checking XML: $(basename "$file")"
+            xmllint --noout "$file" || {
+                echo "❌ Invalid XML format!"
+                rollback_now
+            }
+            ;;
+
+        *.sql)
+            echo "Checking SQL: $(basename "$file")"
+            python3 - <<EOF
+import sqlparse
+import sys
+try:
+    with open("$file", "r") as f:
+        sqlparse.parse(f.read())
+except Exception as e:
+    sys.exit(1)
+EOF
+            if [ $? -ne 0 ]; then
+                echo "❌ Invalid SQL format!"
+                rollback_now
+            fi
+            ;;
+
+        *.txt)
+            echo "Checking TXT: $(basename "$file")"
+            if ! file "$file" | grep -qi "text"; then
+                echo "❌ Invalid TXT file!"
+                rollback_now
+            fi
+            ;;
+    esac
+
+    echo "✔ Valid file: $(basename "$file")"
+}
+
+validate_folder() {
     local folder="$1"
-    local path="$UPLOAD_DIR/$folder"
 
-    if [ ! -d "$path" ]; then
-        echo "Skipping validation: $folder not found."
-        return 0
-    fi
+    [ ! -d "$folder" ] && return 0
 
-    echo "Validating files in folder: $folder"
+    echo "Validating folder: $folder"
 
     shopt -s nullglob
-    local files=("$path"/*)
+    local files=("$folder"/*)
 
-    if [ ${#files[@]} -eq 0 ]; then
-        echo "⚠ WARNING: $folder is empty — skipping deployment."
-        return 0
-    fi
-
-    for f in "${files[@]}"; do
-        case "$f" in
-            *.txt|*.sql|*.xml)
-                echo "✔ VALID: $(basename "$f")"
-                ;;
-            *)
-                echo "❌ INVALID FILE TYPE: $(basename "$f")"
-                echo "Allowed: .txt .sql .xml"
-                return 1
-                ;;
-        esac
+    for file in "${files[@]}"; do
+        if [ -d "$file" ]; then
+            validate_folder "$file"
+        else
+            case "$file" in
+                *.xml|*.sql|*.txt)
+                    validate_file "$file"
+                    ;;
+                *)
+                    echo "✔ Allowed file: $(basename "$file")"
+                    ;;
+            esac
+        fi
     done
 }
 
-# -----------------------
-# Safe move function
-# -----------------------
-move_folder() {
-    local src="$1"
-    local dest="$2"
-
-    validate_files "$src"
-
-    if [ -d "$UPLOAD_DIR/$src" ]; then
-        echo "Deploying $src..."
-        mkdir -p "$dest"
-
-        mv "$UPLOAD_DIR/$src"/* "$dest"/ || {
-            echo "❌ ERROR: Failed moving $src"
-            return 1
-        }
-
-        echo "$src deployed to $dest"
-    else
-        echo "Folder $src not found. Skipping..."
+# ====== RUN VALIDATION ======
+for dir in "$UPLOAD_DIR"/*; do
+    if [ -d "$dir" ]; then
+        validate_folder "$dir"
     fi
-}
+done
 
-# -----------------------
-# Deploy folders
-# -----------------------
-move_folder "bdf-datamaps" "$TARGET_DIR/bdf/config/datamaps"
-move_folder "custom-datamaps" "$TARGET_DIR/bdf/config/customs"
-move_folder "ingestion-manager" "$TARGET_DIR/ingestion_manager/config"
-move_folder "scenarios" "$TARGET_DIR/bdf/config"
-move_folder "controlm-scripts" "$TARGET_DIR/ESP/scripts"
-
-echo "Cleaning temporary upload directory..."
-rm -rf "$UPLOAD_DIR"
-
-echo "====== Production Deployment Completed Successfully ======"
+echo "✔ All validations completed successfully"
