@@ -3,8 +3,8 @@ name: UAT Deployment
 on:
   push:
     branches:
-      - master
-      # - uat
+      # - master
+      - uat
 
 jobs:
   deploy-to-dev:
@@ -15,8 +15,8 @@ jobs:
       - name: Checkout UAT branch
         uses: actions/checkout@v3
         with:
-          ref: master
-          # ref: uat
+          # ref: master
+          ref: uat
 
 
       # 2️⃣ Show repo structure (optional)
@@ -29,10 +29,10 @@ jobs:
       - name: Ensure /uat-bin directory exists on PROD server
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          # key: ${{ secrets.UAT_SSH_KEY }}
+          password: ${{ secrets.UAT_PASSWORD }}
           script: |
             sudo mkdir -p /uat-bin
             sudo chmod 777 /uat-bin
@@ -42,10 +42,10 @@ jobs:
       - name: Upload folders to Production server
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          # key: ${{ secrets.UAT_SSH_KEY }}
+          password: ${{ secrets.UAT_PASSWORD }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
           target: "/opt/fatack_uti/upload_temp"
           strip_components: 0
@@ -56,10 +56,10 @@ jobs:
       - name: Upload production deployment script
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          # key: ${{ secrets.UAT_SSH_KEY }}
+          password: ${{ secrets.UAT_PASSWORD }}
           source: "./.github/bin/uat-deploy.sh"
           target: "/uat-bin"
           strip_components: 2
@@ -68,10 +68,10 @@ jobs:
       - name: Run deployment script on Production
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          # key: ${{ secrets.UAT_SSH_KEY }}
+          password: ${{ secrets.UAT_PASSWORD }}
           script: |
             echo "Listing /uat-bin before running script:"
             ls -la /uat-bin/bin
