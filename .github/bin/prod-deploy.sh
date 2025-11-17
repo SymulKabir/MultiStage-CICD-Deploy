@@ -2,11 +2,12 @@
 set -e
 
 # ====== CONFIG PATHS ======
-UPLOAD_DIR="/opt/fatack/upload_temp_prod"
-BACKUP_DIR="/opt/fatack/backup_$(date +%Y%m%d_%H%M%S)"
+UPLOAD_DIR="/opt/fatack_uti/upload_temp"
+BACKUP_DIR="/opt/fatack_uti/backup_$(date +%Y%m%d_%H%M%S)"
 TARGET_DIR="/opt/fatack/ofsaa"
 
 mkdir -p "$BACKUP_DIR"
+
 
 # ====== ROLLBACK FUNCTION ======
 rollback_now() {
@@ -114,7 +115,7 @@ for dir in "$UPLOAD_DIR"/*; do
     fi
 done
 
-echo "✔ All validations completed successfully"
+# echo "✔ All validations completed successfully"
 
 # ====== MOVE UPLOAD_DIR TO TARGET_DIR ======
 if [ -d "$UPLOAD_DIR" ]; then
@@ -132,3 +133,4 @@ else
     echo "❌ Upload directory $UPLOAD_DIR does not exist. Triggering rollback."
     rollback_now
 fi
+
