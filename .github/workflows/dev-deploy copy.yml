@@ -3,74 +3,67 @@ name: Dev Deployment
 on:
   push:
     branches:
-      - master
-      # - development
+      - development
 
 jobs:
   deploy-to-dev:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout UAT branch for Production release
-      - name: Checkout UAT branch
+      # 1️⃣ Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: master
-          # ref: development
 
-      # 2️⃣ Show repo structure (optional)
+      # 2️⃣ Debug: check repo file structure (optional)
       - name: Show repo file structure
         run: |
-          echo "Workspace content:"
+          echo "Current workspace:"
           ls -R .
 
-      # 3️⃣ Ensure /dev-bin exists on Production server
-      - name: Ensure /dev-bin directory exists on PROD server
+      # 3️⃣ Ensure /dev-bin exists on DEV server
+      - name: Ensure /dev-bin exists on DEV server
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             sudo mkdir -p /dev-bin
             sudo chmod 777 /dev-bin
             echo "/dev-bin directory ready"
 
-      # 4️⃣ Upload deployment folders to production
-      - name: Upload folders to Production server
+      # 4️⃣ Upload all folders to DEV server
+      - name: Upload folders to DEV server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          key: ${{ secrets.DEV_SSH_KEY }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
-          target: "/opt/fatack/upload_temp_prod"
-          strip_components: 0
+          target: "/opt/fatack/upload_temp"
+          strip_components: 0   # keep folders as-is
 
-      # 5️⃣ Upload Production deployment script
-      - name: Upload production deployment script
+      # 5️⃣ Upload deployment script to DEV server (flatten path)
+      - name: Upload deployment script to DEV server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          key: ${{ secrets.DEV_SSH_KEY }}
           source: "./.github/bin/dev-deploy.sh"
+          # source: "./deploy/bin/dev-deploy.sh"
           target: "/dev-bin"
-          strip_components: 2
+          strip_components: 2   # removes deploy/bin/ path
 
-      # 6️⃣ Run deployment script on Production server
-      - name: Run deployment script on Production
+      # 6️⃣ Run deployment script on DEV server
+      - name: Run deployment script on DEV
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
-          # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          key: ${{ secrets.DEV_SSH_KEY }}
           script: |
-            echo "Listing /dev-bin before running script:"
+            echo "Listing /dev-bin/bin before running script:"
             ls -la /dev-bin/bin
             sudo chmod +x /dev-bin/bin/dev-deploy.sh
             sudo /dev-bin/bin/dev-deploy.sh

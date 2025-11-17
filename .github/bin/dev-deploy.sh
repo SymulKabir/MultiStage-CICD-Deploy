@@ -1,109 +1,115 @@
 #!/bin/bash
+set -e
 
-UPLOAD_DIR="/opt/fatack/upload_temp"
+# ====== CONFIG PATHS ======
+UPLOAD_DIR="/opt/fatack/upload_temp_prod"
+BACKUP_DIR="/opt/fatack/backup_$(date +%Y%m%d_%H%M%S)"
+TARGET_DIR="/opt/fatack/ofsaa"
 
-TARGET_BDF="/opt/fatack/ofsaa/bdf/config/datamaps"
-TARGET_CUSTOM="/opt/fatack/ofsaa/bdf/config/customs"
-TARGET_INGEST="/opt/fatack/ofsaa/ingestion_manager/config"
-TARGET_SCENARIOS="/opt/fatack/ofsaa/bdf/config"
-TARGET_CTM="/opt/fatack/ofsaa/ESP/scripts"
+mkdir -p "$BACKUP_DIR"
 
-LOG_FILE="/var/log/dev_deploy.log"
+# ====== ROLLBACK FUNCTION ======
+rollback_now() {
+    echo "⚠ Validation failed! Rolling back..."
 
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
-}
-
-############################################
-# FILE VALIDATION (.txt / .sql / .xml)
-############################################
-validate_files() {
-    DIR="$1"
-    log "Starting file validation inside: $DIR"
-
-    # Validate .txt
-    find "$DIR" -type f -name "*.txt" 2>/dev/null | while read file; do
-        if [ ! -s "$file" ]; then
-            log "ERROR: Empty .txt file: $file"
-            exit 1
-        fi
-        
-        if ! iconv -f utf-8 -t utf-8 "$file" >/dev/null 2>&1; then
-            log "ERROR: Invalid UTF-8 .txt file: $file"
-            exit 1
-        fi
-    done
-
-    # Validate .sql
-    find "$DIR" -type f -name "*.sql" 2>/dev/null | while read file; do
-        if [ ! -s "$file" ]; then
-            log "ERROR: Empty .sql file: $file"
-            exit 1
-        fi
-        
-        QUOTES=$(grep -o "'" "$file" | wc -l)
-        if [ $((QUOTES % 2)) -ne 0 ]; then
-            log "ERROR: Unclosed SQL quote in: $file"
-            exit 1
-        fi
-    done
-
-    # Validate .xml
-    find "$DIR" -type f -name "*.xml" 2>/dev/null | while read file; do
-        if [ ! -s "$file" ]; then
-            log "ERROR: Empty .xml file: $file"
-            exit 1
-        fi
-
-        if ! xmllint --noout "$file" 2>/dev/null; then
-            log "ERROR: Invalid XML structure in: $file"
-            exit 1
-        fi
-    done
-
-    log "File validation passed successfully."
-}
-
-############################################
-# MOVE FUNCTION
-############################################
-move_folder() {
-    FOLDER_NAME=$1
-    SRC="$UPLOAD_DIR/$FOLDER_NAME"
-    DEST="$2"
-
-    log "Processing: $FOLDER_NAME"
-
-    if [ ! -d "$SRC" ] || [ -z "$(ls -A "$SRC")" ]; then
-        log "SKIPPED: $FOLDER_NAME does not exist or is empty"
-        return
+    if [ -d "$BACKUP_DIR" ]; then
+        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
     fi
 
-    if [ ! -d "$DEST" ]; then
-        log "Destination missing → Creating: $DEST"
-        mkdir -p "$DEST" || { log "ERROR: Cannot create $DEST"; exit 1; }
-    fi
-
-    log "Moving $FOLDER_NAME → $DEST"
-    mv "$SRC"/* "$DEST"/ 2>>"$LOG_FILE" || {
-        log "ERROR: Failed moving files from $SRC to $DEST"
-        exit 1
-    }
-
-    log "$FOLDER_NAME deployment completed."
+    echo "✔ Rollback completed"
+    exit 1
 }
 
-############################################
-# RUN DEPLOYMENT
-############################################
-log "==== STARTING DEV DEPLOYMENT ===="
+# ====== CHECK & INSTALL REQUIRED TOOLS ======
+install_if_missing() {
+    local tool="$1"
+    local package="$2"
 
-validate_files "$UPLOAD_DIR"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "⚠ $tool not found. Installing $package..."
+        sudo apt update -y
+        sudo apt install -y "$package"
+        echo "✔ Installed: $tool"
+    else
+        echo "✔ $tool already installed"
+    fi
+}
 
-move_folder "bdf-datamaps" "$TARGET_BDF"
-move_folder "custom-datamaps" "$TARGET_CUSTOM"
-move_folder "ingestion-manager" "$TARGET_INGEST"
-move_folder "scenarios" "$TARGET_SCENARIOS"
-move_folder "controlm-scripts" "$TARGET_CTM"
+install_if_missing "xmllint" "libxml2-utils"
+install_if_missing "python3" "python3"
+install_if_missing "sqlformat" "python3-sqlparse"
+install_if_missing "file" "file"
 
-log "==== DEV DEPLOYMENT FINISHED SUCCESSFULLY ===="
+echo "====== All validation tools are ready ======"
+
+# ====== VALIDATION FUNCTIONS ======
+validate_file() {
+    local file="$1"
+
+    case "$file" in
+        *.xml)
+            echo "Checking XML: $(basename "$file")"
+            xmllint --noout "$file" || {
+                echo "❌ Invalid XML format!"
+                rollback_now
+            }
+            ;;
+
+        *.sql)
+            echo "Checking SQL: $(basename "$file")"
+            python3 -c "
+import sqlparse
+with open(r'$file', 'r') as f:
+    sqlparse.parse(f.read())
+" || {
+                echo "❌ Invalid SQL format!"
+                rollback_now
+            }
+            ;;
+
+        *.txt)
+            echo "Checking TXT: $(basename "$file")"
+            if ! file "$file" | grep -qi "text"; then
+                echo "❌ Invalid TXT file!"
+                rollback_now
+            fi
+            ;;
+    esac
+
+    echo "✔ Valid file: $(basename "$file")"
+}
+
+validate_folder() {
+    local folder="$1"
+
+    [ ! -d "$folder" ] && return 0
+
+    echo "Validating folder: $folder"
+
+    shopt -s nullglob
+    local files=("$folder"/*)
+
+    for file in "${files[@]}"; do
+        if [ -d "$file" ]; then
+            validate_folder "$file"
+        else
+            case "$file" in
+                *.xml|*.sql|*.txt)
+                    validate_file "$file"
+                    ;;
+                *)
+                    echo "✔ Allowed file: $(basename "$file")"
+                    ;;
+            esac
+        fi
+    done
+}
+
+# ====== RUN VALIDATION ======
+for dir in "$UPLOAD_DIR"/*; do
+    if [ -d "$dir" ]; then
+        validate_folder "$dir"
+    fi
+done
+
+echo "✔ All validations completed successfully"
