@@ -3,8 +3,8 @@ name: QA Deployment
 on:
   push:
     branches:
-      - master
-      # - qatest
+      # - master
+      - qatest
 
 jobs:
   deploy-to-dev:
@@ -15,8 +15,8 @@ jobs:
       - name: Checkout qatest branch
         uses: actions/checkout@v3
         with:
-          ref: master
-          # ref: qatest
+          # ref: master
+          ref: qatest
 
 
       # 2️⃣ Show repo structure (optional)
@@ -29,10 +29,10 @@ jobs:
       - name: Ensure /qa-bin directory exists on PROD server
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
           # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          password: ${{ secrets.QA_PASSWORD }}
           script: |
             sudo mkdir -p /qa-bin
             sudo chmod 777 /qa-bin
@@ -42,10 +42,10 @@ jobs:
       - name: Upload folders to Production server
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
           # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          password: ${{ secrets.QA_PASSWORD }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
           target: "/opt/fatack_uti/upload_temp"
           strip_components: 0
@@ -55,10 +55,10 @@ jobs:
       - name: Upload production deployment script
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
           # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          password: ${{ secrets.QA_PASSWORD }}
           source: "./.github/bin/qa-deploy.sh"
           target: "/qa-bin"
           strip_components: 2
@@ -67,10 +67,10 @@ jobs:
       - name: Run deployment script on Production
         uses: appleboy/ssh-action@v0.1.8
         with:
-          host: ${{ secrets.DEV_SSH_HOST }}
-          username: ${{ secrets.DEV_SSH_USER }}
+          host: ${{ secrets.QA_SSH_HOST }}
+          username: ${{ secrets.QA_SSH_USER }}
           # key: ${{ secrets.DEV_SSH_KEY }}
-          password: ${{ secrets.DEV_PASSWORD }}
+          password: ${{ secrets.QA_PASSWORD }}
           script: |
             echo "Listing /qa-bin before running script:"
             ls -la/qa-bin/bin
