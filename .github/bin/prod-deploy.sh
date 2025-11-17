@@ -104,6 +104,7 @@ validate_folder() {
 
 # ====== RUN VALIDATION ====== 
 for dir in "$UPLOAD_DIR"/*; do
+    echo "Hello from $dir"
     validate_folder "$dir"
 done
 
