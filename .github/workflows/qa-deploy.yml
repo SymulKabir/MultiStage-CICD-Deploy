@@ -35,7 +35,7 @@ jobs:
           password: ${{ secrets.DEV_PASSWORD }}
           script: |
             sudo mkdir -p /qa-bin
-            sudo chmod 777 /qa-deploy
+            sudo chmod 777 /qa-bin
             echo "/qa-bin directory ready"
 
       # 4️⃣ Upload deployment folders to production
@@ -60,7 +60,7 @@ jobs:
           # key: ${{ secrets.DEV_SSH_KEY }}
           password: ${{ secrets.DEV_PASSWORD }}
           source: "./.github/bin/qa-deploy.sh"
-          target: "/qa-deploy"
+          target: "/qa-bin"
           strip_components: 2
 
       # 6️⃣ Run deployment script on Production server
@@ -74,5 +74,5 @@ jobs:
           script: |
             echo "Listing /qa-bin before running script:"
             ls -la/qa-bin/bin
-            sudo chmod +x/qa-bin/bin/dev-deploy.sh
-            sudo/qa-bin/bin/dev-deploy.sh
+            sudo chmod +x/qa-bin/bin/qa-bin.sh
+            sudo/qa-bin/bin/qa-bin.sh
