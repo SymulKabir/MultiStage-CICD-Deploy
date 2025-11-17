@@ -1,0 +1,68 @@
+name: UAT Deployment
+
+on:
+  push:
+    branches:
+      - uat
+
+jobs:
+  deploy-to-uat:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Show repo structure (optional but useful)
+      - name: Show repo file structure
+        run: |
+          echo "Current workspace:"
+          ls -R .
+
+      # 3️⃣ Ensure /uat-bin exists
+      - name: Ensure /uat-bin exists on UAT server
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          script: |
+            sudo mkdir -p /uat-bin
+            sudo chmod 777 /uat-bin
+            echo "/uat-bin directory ready"
+
+      # 4️⃣ Upload all folders to UAT server
+      - name: Upload folders to UAT server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
+          target: "/opt/fatack/upload_temp_uat"
+          strip_components: 0
+
+      # 5️⃣ Upload UAT deployment script to UAT server
+      - name: Upload UAT deployment script
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          source: "./.github/bin/uat-deploy.sh"
+          target: "/uat-bin"
+          strip_components: 2
+
+      # 6️⃣ Run deployment script on UAT server
+      - name: Run deployment script on UAT server
+        uses: appleboy/ssh-action@v0.1.8
+        with:
+          host: ${{ secrets.UAT_SSH_HOST }}
+          username: ${{ secrets.UAT_SSH_USER }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          script: |
+            echo "Listing /uat-bin before running script:"
+            ls -la /uat-bin/bin
+            sudo chmod +x /uat-bin/bin/uat-deploy.sh
+            sudo /uat-bin/bin/uat-deploy.sh
