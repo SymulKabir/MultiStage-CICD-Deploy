@@ -1,8 +1,28 @@
 #!/bin/bash
 set -e
 
-# ====== CHECK & INSTALL REQUIRED TOOLS ======
+# ====== CONFIG PATHS ======
+UPLOAD_DIR="/opt/fatack/upload_temp_prod"
+BACKUP_DIR="/opt/fatack/backup_$(date +%Y%m%d_%H%M%S)"
+TARGET_DIR="/opt/fatack/ofsaa"
 
+mkdir -p "$BACKUP_DIR"
+
+
+# ====== ROLLBACK FUNCTION ======
+rollback_now() {
+    echo "⚠ Validation failed! Rolling back..."
+
+    if [ -d "$BACKUP_DIR" ]; then
+        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
+    fi
+
+    echo "✔ Rollback completed"
+    exit 1
+}
+
+
+# ====== CHECK & INSTALL REQUIRED TOOLS ======
 install_if_missing() {
     local tool="$1"
     local package="$2"
@@ -13,7 +33,7 @@ install_if_missing() {
         sudo apt install -y "$package"
         echo "✔ Installed: $tool"
     else
-        echo "✔ $tool is already installed"
+        echo "✔ $tool already installed"
     fi
 }
 
@@ -31,26 +51,26 @@ validate_file() {
 
     case "$file" in
         *.xml)
-            echo "Checking XML with xmllint: $(basename "$file")"
+            echo "Checking XML: $(basename "$file")"
             xmllint --noout "$file" || {
                 echo "❌ Invalid XML format!"
-                return 1
+                rollback_now
             }
             ;;
 
         *.sql)
-            echo "Checking SQL using sqlformat: $(basename "$file")"
+            echo "Checking SQL: $(basename "$file")"
             sqlformat "$file" >/dev/null 2>&1 || {
                 echo "❌ Invalid SQL format!"
-                return 1
+                rollback_now
             }
             ;;
 
         *.txt)
             echo "Checking TXT: $(basename "$file")"
             if ! file "$file" | grep -qi "text"; then
-                echo "❌ Invalid TXT file (not readable text)"
-                return 1
+                echo "❌ Invalid TXT file!"
+                rollback_now
             fi
             ;;
     esac
@@ -64,17 +84,29 @@ validate_folder() {
 
     [ ! -d "$path" ] && return 0
 
+    echo "Validating folder: $folder"
+
     shopt -s nullglob
     local files=("$path"/*)
 
     for file in "${files[@]}"; do
         case "$file" in
             *.xml|*.sql|*.txt)
-                validate_file "$file" || return 1
+                validate_file "$file"
                 ;;
             *)
-                echo "✔ Allowed file: $(basename "$file") (no validation needed)"
+                echo "✔ Allowed file: $(basename "$file")"
                 ;;
         esac
     done
 }
+
+
+# ====== RUN VALIDATION ======
+validate_folder "bdf-datamaps"
+validate_folder "custom-datamaps"
+validate_folder "ingestion-manager"
+validate_folder "scenarios"
+validate_folder "controlm-scripts"
+
+echo "✔ All validations completed successfully"
