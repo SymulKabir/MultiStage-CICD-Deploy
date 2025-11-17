@@ -80,7 +80,9 @@ validate_file() {
 
 validate_folder() {
     local folder="$1"
-    local path="$UPLOAD_DIR/$folder"
+    # local path="$UPLOAD_DIR/$folder"
+    local path="$folder"
+
 
     [ ! -d "$path" ] && return 0
 
