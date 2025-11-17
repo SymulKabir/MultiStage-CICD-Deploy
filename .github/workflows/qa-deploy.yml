@@ -74,5 +74,5 @@ jobs:
           script: |
             echo "Listing /qa-bin before running script:"
             ls -la/qa-bin/bin
-            sudo chmod +x/qa-bin/bin/qa-bin.sh
-            sudo/qa-bin/bin/qa-bin.sh
+            sudo chmod +x/qa-bin/bin/qa-deploy.sh
+            sudo/qa-bin/bin/qa-deploy.sh
