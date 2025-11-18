@@ -3,31 +3,39 @@ set -e
 
 # ====== CONFIG PATHS ======
 UPLOAD_DIR="/opt/fatack_uti/upload_temp"
-BACKUP_DIR="/opt/fatack_uti/backup_$(date +%Y%m%d_%H%M%S)"
 TARGET_DIR="/opt/fatack/ofsaa"
+BACKUP_BASE="/opt/fatack_uti/backups"
+VERSION=$(date +%Y%m%d_%H%M%S)
+ROLLBACK=$1
+ROLLBACK_VERSION=$2
 
-mkdir -p "$BACKUP_DIR"
-
+mkdir -p "$BACKUP_BASE"
 
 # ====== ROLLBACK FUNCTION ======
 rollback_now() {
-    echo "⚠ Validation failed! Rolling back..."
-    mkdir -p "$TARGET_DIR"
+    local version="$1"
     
-    if [ -d "$BACKUP_DIR" ]; then
-        echo "Hell ofrom inner directory "
-        cp -r "$BACKUP_DIR"/* "$TARGET_DIR"/ 2>/dev/null || true
+    if [ -z "$version" ]; then
+        echo "⚠ No rollback version specified, using latest backup..."
+        version=$(ls -1 "$BACKUP_BASE" | sort -r | head -n1)
     fi
 
-    echo "✔ Rollback completed"
-    exit 1
+    if [ -z "$version" ] || [ ! -d "$BACKUP_BASE/$version" ]; then
+        echo "❌ No backup available to rollback!"
+        exit 1
+    fi
+
+    echo "🔄 Rolling back to version: $version"
+    sudo rm -rf "$TARGET_DIR"/*
+    sudo cp -r "$BACKUP_BASE/$version"/* "$TARGET_DIR"/
+    echo "✔ Rollback completed successfully to version: $version"
+    exit 0
 }
 
 # ====== CHECK & INSTALL REQUIRED TOOLS ======
 install_if_missing() {
     local tool="$1"
     local package="$2"
-
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "⚠ $tool not found. Installing $package..."
         sudo apt update -y
@@ -48,89 +56,63 @@ echo "====== All validation tools are ready ======"
 # ====== VALIDATION FUNCTIONS ======
 validate_file() {
     local file="$1"
-
     case "$file" in
         *.xml)
-            echo "Checking XML: $(basename "$file")"
-            xmllint --noout "$file" || {
-                echo "❌ Invalid XML format!"
-                rollback_now
-            }
+            xmllint --noout "$file" || { echo "❌ Invalid XML: $file"; rollback_now "$ROLLBACK_VERSION"; }
             ;;
-
         *.sql)
-            echo "Checking SQL: $(basename "$file")"
             python3 -c "
 import sqlparse
 with open(r'$file', 'r') as f:
     sqlparse.parse(f.read())
-" || {
-                echo "❌ Invalid SQL format!"
-                rollback_now
-            }
+" || { echo "❌ Invalid SQL: $file"; rollback_now "$ROLLBACK_VERSION"; }
             ;;
-
         *.txt)
-            echo "Checking TXT: $(basename "$file")"
             if ! file "$file" | grep -qi "text"; then
-                echo "❌ Invalid TXT file!"
-                rollback_now
+                echo "❌ Invalid TXT file: $file"
+                rollback_now "$ROLLBACK_VERSION"
             fi
             ;;
+        *)
+            echo "✔ Allowed file: $(basename "$file")"
+            ;;
     esac
-
     echo "✔ Valid file: $(basename "$file")"
 }
 
 validate_folder() {
     local folder="$1"
-
     [ ! -d "$folder" ] && return 0
-
-    echo "Validating folder: $folder"
-
     shopt -s nullglob
-    local files=("$folder"/*)
-
-    for file in "${files[@]}"; do
+    for file in "$folder"/*; do
         if [ -d "$file" ]; then
             validate_folder "$file"
         else
-            case "$file" in
-                *.xml|*.sql|*.txt)
-                    validate_file "$file"
-                    ;;
-                *)
-                    echo "✔ Allowed file: $(basename "$file")"
-                    ;;
-            esac
+            validate_file "$file"
         fi
     done
 }
 
-# ====== RUN VALIDATION ======
-for dir in "$UPLOAD_DIR"/*; do
-    if [ -d "$dir" ]; then
-        validate_folder "$dir"
-    fi
-done
-
-# echo "✔ All validations completed successfully"
-
-# ====== MOVE UPLOAD_DIR TO TARGET_DIR ======
-if [ -d "$UPLOAD_DIR" ]; then
-    echo "Moving validated files from $UPLOAD_DIR to $TARGET_DIR..."
-    
-    mkdir -p "$TARGET_DIR"
-
-    cp -r "$UPLOAD_DIR"/* "$TARGET_DIR"/ || {
-        echo "❌ Failed to move files. Triggering rollback."
-        rollback_now
-    }
-
-    echo "✔ Deployment completed successfully"
-else
-    echo "❌ Upload directory $UPLOAD_DIR does not exist. Triggering rollback."
-    rollback_now
+# ====== HANDLE MANUAL ROLLBACK ======
+if [ "$ROLLBACK" == "true" ]; then
+    rollback_now "$ROLLBACK_VERSION"
 fi
 
+# ====== VALIDATE UPLOAD ======
+for dir in "$UPLOAD_DIR"/*; do
+    [ -d "$dir" ] && validate_folder "$dir"
+done
+
+# ====== BACKUP CURRENT DEPLOYMENT ======
+if [ -d "$TARGET_DIR" ]; then
+    BACKUP_DIR="$BACKUP_BASE/$VERSION"
+    echo "Backing up current deployment to: $BACKUP_DIR"
+    sudo cp -r "$TARGET_DIR" "$BACKUP_DIR"
+fi
+
+# ====== DEPLOY NEW FILES ======
+echo "Deploying new files from $UPLOAD_DIR to $TARGET_DIR"
+sudo mkdir -p "$TARGET_DIR"
+sudo cp -r "$UPLOAD_DIR"/* "$TARGET_DIR"/ || { echo "❌ Deployment failed! Triggering rollback."; rollback_now "$ROLLBACK_VERSION"; }
+
+echo "✔ Deployment completed successfully (version: $VERSION)"

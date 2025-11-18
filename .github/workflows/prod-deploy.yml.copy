@@ -13,7 +13,7 @@ on:
           - "true"
 
       rollback_version:
-        description: "Version to rollback to (timestamped format YYYYMMDD_HHMMSS). Required if rollback=true"
+        description: "Version to rollback to (vX.Y.Z). Required if rollback=true"
         required: false
         type: string
         default: ""
@@ -23,60 +23,66 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout UAT branch
+      # 1️⃣ Checkout UAT branch for Production release
       - name: Checkout UAT branch
         uses: actions/checkout@v3
         with:
-          ref: master
-          # ref: uat
+          # ref: master
+          ref: uat
 
-      # 2️⃣ Optional: Show repo structure
+      # 2️⃣ Show repo structure (optional)
       - name: Show repo file structure
         run: |
           echo "Workspace content:"
           ls -R .
 
       # 3️⃣ Ensure /prod-bin exists on Production server
-      - name: Ensure /prod-bin directory exists
+      - name: Ensure /prod-bin directory exists on PROD server
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
           password: ${{ secrets.PROD_PASSWORD }}
           script: |
             sudo mkdir -p /prod-bin
             sudo chmod 777 /prod-bin
             echo "/prod-bin directory ready"
 
-      # 4️⃣ Upload deployment folders to Production server
+      # 4️⃣ Upload deployment folders to production
       - name: Upload folders to Production server
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
           password: ${{ secrets.PROD_PASSWORD }}
           source: "bdf-datamaps,custom-datamaps,ingestion-manager,scenarios,controlm-scripts"
           target: "/opt/fatack_uti/upload_temp"
           strip_components: 0
 
-      # 5️⃣ Upload production deployment script
+      # 5️⃣ Upload Production deployment script
       - name: Upload production deployment script
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
           password: ${{ secrets.PROD_PASSWORD }}
           source: "./.github/bin/prod-deploy.sh"
           target: "/prod-bin"
           strip_components: 2
 
-      # 6️⃣ Run deployment script with rollback support
+      # 6️⃣ Run deployment script on Production server
       - name: Run deployment script on Production
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
+          # key: ${{ secrets.PROD_SSH_KEY }}
           password: ${{ secrets.PROD_PASSWORD }}
           script: |
+            echo "Listing /prod-bin before running script:"
+            ls -la /prod-bin/bin
             sudo chmod +x /prod-bin/bin/prod-deploy.sh
-            sudo /prod-bin/bin/prod-deploy.sh "${{ github.event.inputs.rollback }}" "${{ github.event.inputs.rollback_version }}"
+            sudo /prod-bin/bin/prod-deploy.sh
