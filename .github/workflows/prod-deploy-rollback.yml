@@ -1,4 +1,4 @@
-name: Production Deployment
+name: Production Deployment With Rollback
 
 on:
   workflow_dispatch:
@@ -66,7 +66,7 @@ jobs:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
           password: ${{ secrets.PROD_PASSWORD }}
-          source: "./.github/bin/prod-deploy.sh"
+          source: "./.github/bin/prod-deploy-rollback.sh"
           target: "/prod-bin"
           strip_components: 2
 
@@ -78,5 +78,5 @@ jobs:
           username: ${{ secrets.PROD_SSH_USER }}
           password: ${{ secrets.PROD_PASSWORD }}
           script: |
-            sudo chmod +x /prod-bin/bin/prod-deploy.sh
-            sudo /prod-bin/bin/prod-deploy.sh "${{ github.event.inputs.rollback }}" "${{ github.event.inputs.rollback_version }}"
+            sudo chmod +x /prod-bin/bin/prod-deploy-rollback.sh
+            sudo /prod-bin/bin/prod-deploy-rollback.sh "${{ github.event.inputs.rollback }}" "${{ github.event.inputs.rollback_version }}"
