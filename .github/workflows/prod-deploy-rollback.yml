@@ -27,8 +27,8 @@ jobs:
       - name: Checkout UAT branch
         uses: actions/checkout@v3
         with:
-          ref: master
-          # ref: uat
+          # ref: master
+          ref: uat
 
       # 2️⃣ Optional: Show repo structure
       - name: Show repo file structure
